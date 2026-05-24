@@ -1,5 +1,6 @@
 # =========================================================
 # OVERLAYER SEPOLIA BOT
+# PER WALLET TX SYSTEM
 # =========================================================
 
 import os
@@ -311,73 +312,85 @@ for index, pk in enumerate(PRIVATE_KEYS):
 # STATE
 # =========================================================
 
-CURRENT_TX = 0
-TARGET_TX = 0
-
-def save_state():
-
-    data = {
-
-        "current_tx": CURRENT_TX,
-        "target_tx": TARGET_TX
-
-    }
-
-    with open(STATE_FILE, "w") as f:
-
-        json.dump(data, f)
+STATE = {}
 
 def load_state():
 
-    global CURRENT_TX
-    global TARGET_TX
+    global STATE
 
     if not os.path.exists(STATE_FILE):
 
-        return False
+        STATE = {}
+
+        return
 
     try:
 
         with open(STATE_FILE, "r") as f:
 
-            data = json.load(f)
-
-        CURRENT_TX = data.get("current_tx", 0)
-        TARGET_TX = data.get("target_tx", 0)
-
-        print(
-            f"[STATE LOADED] "
-            f"{CURRENT_TX}/{TARGET_TX}"
-        )
-
-        return True
+            STATE = json.load(f)
 
     except:
 
-        return False
+        STATE = {}
 
-def clear_state():
+def save_state():
 
-    if os.path.exists(STATE_FILE):
+    with open(STATE_FILE, "w") as f:
 
-        os.remove(STATE_FILE)
+        json.dump(STATE, f)
+
+def init_wallet_state(wallet):
+
+    address = wallet["address"]
+
+    if address not in STATE:
+
+        STATE[address] = {
+
+            "current_tx": 0,
+
+            "target_tx": random.randint(
+                TARGET_TX_MIN,
+                TARGET_TX_MAX
+            )
+
+        }
+
+        save_state()
+
+def get_current_tx(wallet):
+
+    return STATE[wallet["address"]]["current_tx"]
+
+def get_target_tx(wallet):
+
+    return STATE[wallet["address"]]["target_tx"]
+
+def add_tx(wallet):
+
+    STATE[wallet["address"]]["current_tx"] += 1
+
+    save_state()
+
+    current = get_current_tx(wallet)
+    target = get_target_tx(wallet)
+
+    print(f"[TX COUNT] {current}/{target}")
+
+def complete_wallet_cycle(wallet):
+
+    address = wallet["address"]
+
+    if address in STATE:
+
+        del STATE[address]
+
+        save_state()
 
 # =========================================================
 # HELPERS
 # =========================================================
-
-def add_tx():
-
-    global CURRENT_TX
-
-    CURRENT_TX += 1
-
-    save_state()
-
-    print(
-        f"[TX COUNT] "
-        f"{CURRENT_TX}/{TARGET_TX}"
-    )
 
 def log(wallet, text):
 
@@ -517,7 +530,7 @@ def send_tx(tx, wallet, action="UNKNOWN"):
 
             print(f"[SUCCESS] {action}\n")
 
-            add_tx()
+            add_tx(wallet)
 
             return True
 
@@ -653,10 +666,7 @@ def approve(
 
     if already:
 
-        log(
-            wallet,
-            f"{text} SKIPPED"
-        )
+        log(wallet, f"{text} SKIPPED")
 
         return False
 
@@ -824,85 +834,56 @@ def transfer_token(
     return send_tx(tx, sender_wallet, action)
 
 # =========================================================
-# MAIN
+# WALLET CYCLE
 # =========================================================
 
-def run_cycle():
+def run_wallet_cycle(wallet):
 
-    global CURRENT_TX
-    global TARGET_TX
+    init_wallet_state(wallet)
 
-    restored = load_state()
-
-    if not restored:
-
-        CURRENT_TX = 0
-
-        TARGET_TX = random.randint(
-            TARGET_TX_MIN,
-            TARGET_TX_MAX
-        )
-
-        save_state()
+    target = get_target_tx(wallet)
 
     print(
-        f"\n[TARGET TX] {TARGET_TX}\n"
+        f"\n[Wallet {wallet['id']} TARGET TX] "
+        f"{target}\n"
     )
 
-    random.shuffle(WALLETS)
+    print(
+        f"\n========== WALLET {wallet['id']} START ==========\n"
+    )
 
-    print("\n========== START CYCLE ==========\n")
+    faucet_token(wallet, USDC, "USDC")
+    faucet_token(wallet, USDT, "USDT")
 
-    # =====================================================
-    # FAUCET
-    # =====================================================
+    approve(
+        usdc,
+        USDC_PLUS,
+        wallet,
+        "APPROVE USDC"
+    )
 
-    for wallet in WALLETS:
+    approve(
+        usdt,
+        USDT_PLUS,
+        wallet,
+        "APPROVE USDT"
+    )
 
-        faucet_token(wallet, USDC, "USDC")
-        faucet_token(wallet, USDT, "USDT")
+    approve(
+        usdc_plus,
+        USDC_STAKING,
+        wallet,
+        "APPROVE USDC+"
+    )
 
-    # =====================================================
-    # APPROVE
-    # =====================================================
+    approve(
+        usdt_plus,
+        USDT_STAKING,
+        wallet,
+        "APPROVE USDT+"
+    )
 
-    for wallet in WALLETS:
-
-        approve(
-            usdc,
-            USDC_PLUS,
-            wallet,
-            "APPROVE USDC"
-        )
-
-        approve(
-            usdt,
-            USDT_PLUS,
-            wallet,
-            "APPROVE USDT"
-        )
-
-        approve(
-            usdc_plus,
-            USDC_STAKING,
-            wallet,
-            "APPROVE USDC+"
-        )
-
-        approve(
-            usdt_plus,
-            USDT_STAKING,
-            wallet,
-            "APPROVE USDT+"
-        )
-
-    # =====================================================
-    # BIG MINTS
-    # =====================================================
-
-    if CURRENT_TX < 2:
-
-        wallet = random.choice(WALLETS)
+    if get_current_tx(wallet) < 2:
 
         mint_plus(
             wallet,
@@ -924,18 +905,12 @@ def run_cycle():
 
         random_sleep()
 
-    # =====================================================
-    # RANDOM ACTIONS
-    # =====================================================
-
-    while CURRENT_TX < TARGET_TX - 8:
+    while get_current_tx(wallet) < target - 8:
 
         action_type = random.choice([
             "stake",
             "bridge"
         ])
-
-        wallet = random.choice(WALLETS)
 
         token_type = random.choice([
             "usdc",
@@ -1029,12 +1004,6 @@ def run_cycle():
         if ok:
             random_sleep()
 
-    # =====================================================
-    # BIG ACTIVITIES
-    # =====================================================
-
-    wallet = random.choice(WALLETS)
-
     amount = big_random()
 
     ensure_plus_balance(
@@ -1075,19 +1044,19 @@ def run_cycle():
 
     random_sleep()
 
-    # =====================================================
-    # TRANSFERS USDC+
-    # =====================================================
-
     if len(WALLETS) >= 2:
 
-        sender = WALLETS[0]
-        receiver = WALLETS[1]
+        other_wallets = [
+            w for w in WALLETS
+            if w["address"] != wallet["address"]
+        ]
+
+        receiver = random.choice(other_wallets)
 
         amount = big_random()
 
         ensure_plus_balance(
-            sender,
+            wallet,
             usdc_plus,
             USDC,
             usdc_plus,
@@ -1097,7 +1066,7 @@ def run_cycle():
 
         transfer_token(
             usdc_plus,
-            sender,
+            wallet,
             receiver,
             amount,
             "SEND USDC+"
@@ -1108,21 +1077,17 @@ def run_cycle():
         transfer_token(
             usdc_plus,
             receiver,
-            sender,
+            wallet,
             amount,
             "RETURN USDC+"
         )
 
         random_sleep()
 
-        # =================================================
-        # TRANSFERS USDT+
-        # =================================================
-
         amount = big_random()
 
         ensure_plus_balance(
-            sender,
+            wallet,
             usdt_plus,
             USDT,
             usdt_plus,
@@ -1132,7 +1097,7 @@ def run_cycle():
 
         transfer_token(
             usdt_plus,
-            sender,
+            wallet,
             receiver,
             amount,
             "SEND USDT+"
@@ -1143,28 +1108,36 @@ def run_cycle():
         transfer_token(
             usdt_plus,
             receiver,
-            sender,
+            wallet,
             amount,
             "RETURN USDT+"
         )
 
         random_sleep()
 
-    print("\n========== CYCLE COMPLETE ==========\n")
+    print(
+        f"\n========== WALLET {wallet['id']} COMPLETE ==========\n"
+    )
 
-    clear_state()
+    complete_wallet_cycle(wallet)
 
 # =========================================================
-# LOOP
+# MAIN LOOP
 # =========================================================
 
 def run_forever():
+
+    load_state()
 
     while True:
 
         try:
 
-            run_cycle()
+            random.shuffle(WALLETS)
+
+            for wallet in WALLETS:
+
+                run_wallet_cycle(wallet)
 
         except Exception as e:
 
@@ -1176,7 +1149,7 @@ def run_forever():
         )
 
         print(
-            f"\nNEXT CYCLE IN "
+            f"\nNEXT GLOBAL CYCLE IN "
             f"{round(sleep_time / 3600, 2)} HOURS\n"
         )
 
