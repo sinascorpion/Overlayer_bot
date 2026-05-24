@@ -3,6 +3,7 @@
 # =========================================================
 
 import os
+import json
 import time
 import random
 
@@ -54,6 +55,8 @@ TARGET_TX_MAX = 55
 
 CYCLE_SLEEP_MIN = 22 * 60 * 60
 CYCLE_SLEEP_MAX = 28 * 60 * 60
+
+STATE_FILE = "cycle_state.json"
 
 # =========================================================
 # RPCS
@@ -305,11 +308,59 @@ for index, pk in enumerate(PRIVATE_KEYS):
     })
 
 # =========================================================
-# GLOBAL TX COUNTER
+# STATE
 # =========================================================
 
 CURRENT_TX = 0
 TARGET_TX = 0
+
+def save_state():
+
+    data = {
+
+        "current_tx": CURRENT_TX,
+        "target_tx": TARGET_TX
+
+    }
+
+    with open(STATE_FILE, "w") as f:
+
+        json.dump(data, f)
+
+def load_state():
+
+    global CURRENT_TX
+    global TARGET_TX
+
+    if not os.path.exists(STATE_FILE):
+
+        return False
+
+    try:
+
+        with open(STATE_FILE, "r") as f:
+
+            data = json.load(f)
+
+        CURRENT_TX = data.get("current_tx", 0)
+        TARGET_TX = data.get("target_tx", 0)
+
+        print(
+            f"[STATE LOADED] "
+            f"{CURRENT_TX}/{TARGET_TX}"
+        )
+
+        return True
+
+    except:
+
+        return False
+
+def clear_state():
+
+    if os.path.exists(STATE_FILE):
+
+        os.remove(STATE_FILE)
 
 # =========================================================
 # HELPERS
@@ -320,6 +371,8 @@ def add_tx():
     global CURRENT_TX
 
     CURRENT_TX += 1
+
+    save_state()
 
     print(
         f"[TX COUNT] "
@@ -372,7 +425,7 @@ def get_balance(token, wallet):
         return 0
 
 # =========================================================
-# ALLOWANCE CHECK
+# ALLOWANCE
 # =========================================================
 
 def has_allowance(
@@ -779,12 +832,18 @@ def run_cycle():
     global CURRENT_TX
     global TARGET_TX
 
-    CURRENT_TX = 0
+    restored = load_state()
 
-    TARGET_TX = random.randint(
-        TARGET_TX_MIN,
-        TARGET_TX_MAX
-    )
+    if not restored:
+
+        CURRENT_TX = 0
+
+        TARGET_TX = random.randint(
+            TARGET_TX_MIN,
+            TARGET_TX_MAX
+        )
+
+        save_state()
 
     print(
         f"\n[TARGET TX] {TARGET_TX}\n"
@@ -838,36 +897,38 @@ def run_cycle():
         )
 
     # =====================================================
-    # LARGE MINTS
+    # BIG MINTS
     # =====================================================
 
-    wallet = random.choice(WALLETS)
+    if CURRENT_TX < 2:
 
-    mint_plus(
-        wallet,
-        usdc_plus,
-        USDC,
-        large_random(),
-        "BIG MINT USDC+"
-    )
+        wallet = random.choice(WALLETS)
 
-    random_sleep()
+        mint_plus(
+            wallet,
+            usdc_plus,
+            USDC,
+            large_random(),
+            "BIG MINT USDC+"
+        )
 
-    mint_plus(
-        wallet,
-        usdt_plus,
-        USDT,
-        large_random(),
-        "BIG MINT USDT+"
-    )
+        random_sleep()
 
-    random_sleep()
+        mint_plus(
+            wallet,
+            usdt_plus,
+            USDT,
+            large_random(),
+            "BIG MINT USDT+"
+        )
+
+        random_sleep()
 
     # =====================================================
-    # RANDOM ACTIVITY
+    # RANDOM ACTIONS
     # =====================================================
 
-    while CURRENT_TX < TARGET_TX - 4:
+    while CURRENT_TX < TARGET_TX - 8:
 
         action_type = random.choice([
             "stake",
@@ -881,21 +942,25 @@ def run_cycle():
             "usdt"
         ])
 
-        if action_type == "stake":
+        print(
+            f"\n[NEXT ACTION] "
+            f"{action_type.upper()} "
+            f"{token_type.upper()}"
+        )
 
-            amount = small_random()
+        amount = small_random()
+
+        if action_type == "stake":
 
             if token_type == "usdc":
 
                 ensure_plus_balance(
-
                     wallet,
                     usdc_plus,
                     USDC,
                     usdc_plus,
                     amount,
                     "MINT USDC+"
-
                 )
 
                 ok = stake(
@@ -908,14 +973,12 @@ def run_cycle():
             else:
 
                 ensure_plus_balance(
-
                     wallet,
                     usdt_plus,
                     USDT,
                     usdt_plus,
                     amount,
                     "MINT USDT+"
-
                 )
 
                 ok = stake(
@@ -927,19 +990,15 @@ def run_cycle():
 
         else:
 
-            amount = small_random()
-
             if token_type == "usdc":
 
                 ensure_plus_balance(
-
                     wallet,
                     usdc_plus,
                     USDC,
                     usdc_plus,
                     amount,
                     "MINT USDC+"
-
                 )
 
                 ok = bridge(
@@ -952,14 +1011,12 @@ def run_cycle():
             else:
 
                 ensure_plus_balance(
-
                     wallet,
                     usdt_plus,
                     USDT,
                     usdt_plus,
                     amount,
                     "MINT USDT+"
-
                 )
 
                 ok = bridge(
@@ -973,7 +1030,7 @@ def run_cycle():
             random_sleep()
 
     # =====================================================
-    # LARGE ACTIVITIES
+    # BIG ACTIVITIES
     # =====================================================
 
     wallet = random.choice(WALLETS)
@@ -981,14 +1038,12 @@ def run_cycle():
     amount = big_random()
 
     ensure_plus_balance(
-
         wallet,
         usdc_plus,
         USDC,
         usdc_plus,
         amount,
         "MINT USDC+"
-
     )
 
     stake(
@@ -1003,14 +1058,12 @@ def run_cycle():
     amount = big_random()
 
     ensure_plus_balance(
-
         wallet,
         usdt_plus,
         USDT,
         usdt_plus,
         amount,
         "MINT USDT+"
-
     )
 
     bridge(
@@ -1023,7 +1076,7 @@ def run_cycle():
     random_sleep()
 
     # =====================================================
-    # TRANSFERS
+    # TRANSFERS USDC+
     # =====================================================
 
     if len(WALLETS) >= 2:
@@ -1034,14 +1087,12 @@ def run_cycle():
         amount = big_random()
 
         ensure_plus_balance(
-
             sender,
             usdc_plus,
             USDC,
             usdc_plus,
             amount,
             "MINT USDC+"
-
         )
 
         transfer_token(
@@ -1064,7 +1115,44 @@ def run_cycle():
 
         random_sleep()
 
+        # =================================================
+        # TRANSFERS USDT+
+        # =================================================
+
+        amount = big_random()
+
+        ensure_plus_balance(
+            sender,
+            usdt_plus,
+            USDT,
+            usdt_plus,
+            amount,
+            "MINT USDT+"
+        )
+
+        transfer_token(
+            usdt_plus,
+            sender,
+            receiver,
+            amount,
+            "SEND USDT+"
+        )
+
+        random_sleep()
+
+        transfer_token(
+            usdt_plus,
+            receiver,
+            sender,
+            amount,
+            "RETURN USDT+"
+        )
+
+        random_sleep()
+
     print("\n========== CYCLE COMPLETE ==========\n")
+
+    clear_state()
 
 # =========================================================
 # LOOP
