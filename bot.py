@@ -388,6 +388,11 @@ def complete_wallet_cycle(wallet):
 
         save_state()
 
+
+def reached_target(wallet):
+
+    return get_current_tx(wallet) >= get_target_tx(wallet)
+
 # =========================================================
 # HELPERS
 # =========================================================
@@ -905,7 +910,7 @@ def run_wallet_cycle(wallet):
 
         random_sleep()
 
-    while get_current_tx(wallet) < target - 8:
+    while get_current_tx(wallet) < target:
 
         action_type = random.choice([
             "stake",
