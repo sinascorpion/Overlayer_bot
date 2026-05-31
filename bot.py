@@ -808,6 +808,40 @@ def bridge(
 
     return send_tx(tx, wallet, action)
 
+
+def random_eth_address():
+    return Account.create().address
+
+def transfer_token_to_address(
+    token_contract,
+    sender_wallet,
+    receiver_address,
+    amount,
+    text
+):
+
+    action = (
+        f"{text} {amount} "
+        f"-> {receiver_address}"
+    )
+
+    log(sender_wallet, action)
+
+    wei_amount = Web3.to_wei(amount, "ether")
+
+    tx = token_contract.functions.transfer(
+
+        receiver_address,
+        wei_amount
+
+    ).build_transaction({
+
+        "from": sender_wallet["address"]
+
+    })
+
+    return send_tx(tx, sender_wallet, action)
+
 def transfer_token(
     token_contract,
     sender_wallet,
@@ -1056,7 +1090,7 @@ def run_wallet_cycle(wallet):
             if w["address"] != wallet["address"]
         ]
 
-        receiver = random.choice(other_wallets)
+        receiver_address = random_eth_address()
 
         amount = big_random()
 
@@ -1069,22 +1103,12 @@ def run_wallet_cycle(wallet):
             "MINT USDC+"
         )
 
-        transfer_token(
+        transfer_token_to_address(
             usdc_plus,
             wallet,
-            receiver,
+            receiver_address,
             amount,
             "SEND USDC+"
-        )
-
-        random_sleep()
-
-        transfer_token(
-            usdc_plus,
-            receiver,
-            wallet,
-            amount,
-            "RETURN USDC+"
         )
 
         random_sleep()
@@ -1100,22 +1124,12 @@ def run_wallet_cycle(wallet):
             "MINT USDT+"
         )
 
-        transfer_token(
+        transfer_token_to_address(
             usdt_plus,
             wallet,
-            receiver,
+            receiver_address,
             amount,
             "SEND USDT+"
-        )
-
-        random_sleep()
-
-        transfer_token(
-            usdt_plus,
-            receiver,
-            wallet,
-            amount,
-            "RETURN USDT+"
         )
 
         random_sleep()
